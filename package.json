@@ -1,0 +1,20 @@
+{
+  "name": "baguette-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "ejs": "^2.5.1",
+    "express": "^4.14.0",
+    "express-session": "^1.14.0",
+    "is-root": "^1.0.0",
+    "mongoose": "^4.5.8",
+    "multer": "^1.2.0"
+  }
+}
