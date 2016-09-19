@@ -7,6 +7,8 @@ var fs = require('fs');
 var logger = require('../logger');
 var ImageUpload = multer({ dest: '/upload' });
 
+const MISSING_MESSAGE = 'soneting is missing';
+
 module.exports = function(app) {
 
   app.post('/upload/content-images/:filename', ImageUpload.single('image'), function (req, res) {
@@ -330,8 +332,7 @@ module.exports = function(app) {
                   if (err) {
                     console.log(err);
                     return res.json({error: "database failure"});
-                  }
-                  else {
+                  } else {
                     return res.json({message:"unfollow complete"});
                   }
                 });
@@ -342,125 +343,123 @@ module.exports = function(app) {
     });
   });
 
+  //GET /api/post/:post_id
   app.get('/api/post/:post_id', function(req, res) {
-    console.log(("[req] /api/post"+req.params.post_id).blue);
+    reqAddr = '/api/post'+req.params.post_id;
+    logger.logReq(reqAddr);
     if (req.params.post_id==undefined) {
-      console.error(("[req] /api/post"+req.params.post_id+": something is empty").red);
-      return res.status(400).json({result:0});
+      logger.logError(reqAddr, MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
     Post.find({"_id": req.params.post_id}, function(error, posts) {
       if (error) {
-        console.error(("[err] /api/post"+req.params.post_id).red);
-        console.error(error);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
-      }
-      else if (!posts[0]) {
-        console.error(("[ok ] /api/post"+req.params.post_id).green);
+      } else if (!posts[0]) {
+        logger.logError(reqAddr, 'Post not found');
         return res.status(404).json({result: 0});
+      } else {
+        logger.logOk(reqAddr);
+        return res.status(200).json({result: 1});
       }
-      else return res.status(200).json({result: 1, post: posts[0]})
     });
   });
 
   //POST /api/post/write
   app.post('/api/post/write', function(req, res) {
-    console.log(("[req] /api/post/write").blue);
-    console.log(req.body);
+    reqAddr = '/api/post/write';
+    logger.logReq(reqAddr);
     if (req.body.uploaderID==undefined) {
-      console.error("[err] /api/post/write: something is empty");
-      return res.status(404).json({result: 0});
+      logger.logError(reqAddr, MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
     var post = new Post();
     post.uploader = req.body.uploaderID;
-    if (req.body.explanation != undefined)
+    if (req.body.explanation != undefined) {
       post.explanation = req.body.explanation;
+    }
     post.title = req.body.title;
     post.comments = new Array();
 
     User.findOne({_id: req.body.uploaderID}, function(err,User) {
-      if (!User){
-        console.log("[err] /api/post/write: user not found".red);
-        return res.json({ error: 'user not found' });
+      if (!User) {
+        logger.logError(reqAddr, 'User not found');
+        return res.status(404).json({result: 0});
       }
       post.uploaderName = User.screenName;
       post.save(function(err, post) {
         if (err) {
-          console.error("error");
+          logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
+        } else {
+          logger.logOk(reqAddr);
+          return res.status(200).json({result: 1, postid: post._id});
         }
-        else return res.status(200).json({result: 1, postid: post._id});
       });
     });
-    console.log("[ok ] /api/post/write".blue);
   });
 
   //POST /api/post/:post_id/comment
   app.post('/api/post/:post_id/comment', function(req, res) {
-    console.log(('[req] /api/post/'+req.params.post_id+"/comment").blue);
+    reqAddr = '/api/post/'+req.params.post_id+'/comment';
+    logger.logReq(reqAddr);
     if (req.body.user_id==undefined || req.body.content==undefined) {
-      console.error(('[err] /api/post/'+req.params.post_id+"/comment: Something is missing").red);
+      logger.logError(reqAddr, MISSING_MESSAGE);
       return res.status(400).json({result: 0});
     }
     User.find({ _id: req.body.user_id }, function(err, Users) {
       if (err) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/comment").red);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       }
       if (!Users[0]) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/comment: User not found").red);
+        logger.logError(reqAddr, 'User not found');
         return res.status(404).json({result: 0});
       }
       Post.find({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, function(err, post) {
-      if (err) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/comment").red);
-        console.error(err);
-        return res.status(500).json({result: 0});
-      }
-      else if (!post[0]) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/comment: Post not found").red);
-        return res.status(404).json({result: 0});
-      }
-      else Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$push": {"comments": { "uploader": req.body.user_id, "uploaderID": Users[0].userIDString, "uploaderUsername": Users[0].screenName, "content": req.body.content, "uploadTime": Date.now } } }, function(err, output) {
-       if (err) {
-         console.error(('[err] /api/post/'+req.params.post_id+"/comment").red);
-         console.error(err);
-         return res.status(500).json({result: 0});
-       }
-       else if (!output.n) {
-         console.error(('[err] /api/post/'+req.params.post_id+"/comment: Post not found").red);
-         return res.status(404).json({result: 0});
-       }
-       else {
-         console.log(('[ok ] /api/post/'+req.params.post_id+"/comment").green)
-         return res.status(200).json({result: 1});
-       }
-     });
-    });
+        if (err) {
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
+        } else if (!post[0]) {
+          logger.logError(reqAddr, 'Post not found');
+          return res.status(404).json({result: 0});
+        } else {
+        Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$push": {"comments": { "uploader": req.body.user_id, "uploaderID": Users[0].userIDString, "uploaderUsername": Users[0].screenName, "content": req.body.content, "uploadTime": Date.now } } }, function(err, output) {
+          if (err) {
+            logger.logError(reqAddr, err);
+            return res.status(500).json({result: 0});
+          } else if (!output.n) {
+            logger.logError(reqAddr, 'Post not found');
+            return res.status(404).json({result: 0});
+          } else {
+            logger.logOk(reqAddr);
+            return res.status(200).json({result: 1});
+          }
+        });
+      });
     });
   });
 
   //POST /api/post/:post_id/like
   app.post('/api/post/:post_id/like', function(req, res) {
-    console.log(('[req] /api/post/'+req.params.post_id+"/like").blue);
+    reqAddr = '[req] /api/post/'+req.params.post_id+'/like';
+    logger.logReq(reqAddr);
     if (req.body.user_id==undefined) {
-      console.error(('[req] /api/post/'+req.params.post_id+"/like: Something is empty").red);
+      logger.logError(reqAddr, MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
-     Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$addToSet": {"likes": req.body.user_id}}, function(err, output) {
+    Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$addToSet": {"likes": req.body.user_id}}, function(err, output) {
       if (err) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/like").red);
-        console.error(err);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
-      }
-      else if (!output.n) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/like: Post not found").red);
-        return res.status(500).json({result: 0});
-      }
-      else if (output.nModified == 0) {
-        console.log(('[ok ] /api/post/'+req.params.post_id+"/like: Already liked").green);
-        return res.status(200).json({result: 1});
-      }
-      else {
-        console.log(('[ok ] /api/post/'+req.params.post_id+"/like").green)
+      } else if (!output.n) {
+        logger.logError(reqAddr, 'Post not found');
+        return res.status(404).json({result: 0});
+      } else if (output.nModified == 0) {
+        logger.logOk(reqAddr, 'Already liked');
+        return res.status(200).json({result: 0});
+      } else {
+        logger.logOk(reqAddr);
         return res.status(200).json({result: 1});
       }
     });
@@ -468,70 +467,66 @@ module.exports = function(app) {
 
   //POST /api/post/:post_id/unlike
   app.post('/api/post/:post_id/unlike', function(req, res) {
-    console.log(('[req] /api/post/'+req.params.post_id+"/unlike").blue);
+    reqAddr = '[req] /api/post/'+req.params.post_id+'/unlike';
+    logger.logReq(reqAddr);
     if (req.body.user_id==undefined) {
-      console.error(('[req] /api/post/'+req.params.post_id+"/unlike: Something is empty").red);
+      logger.logError(reqAddr, MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
-     Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$pull": {"likes": req.body.user_id}}, function(err, output) {
+    Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$pull": {"likes": req.body.user_id}}, function(err, output) {
       if (err) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/unlike").red);
-        console.error(err);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
-      }
-      else if (!output.n) {
-        console.error(('[err] /api/post/'+req.params.post_id+"/unlike: Post not found").red);
-        return res.status(500).json({result: 0});
-      }
-      else if (output.nModified == 0) {
-        console.log(('[ok ] /api/post/'+req.params.post_id+"/unlike: Not liked").green);
+      } else if (!output.n) {
+        logger.logError(reqAddr, 'Post not found');
+        return res.status(404).json({result: 0});
+      } else if (output.nModified == 0) {
+        logger.logOk(reqAddr, 'Not liked');
+        return res.status(200).json({result: 0});
+      } else {
+        logger.logOk(reqAddr);
         return res.status(200).json({result: 1});
       }
-      else {
-        console.log(('[ok ] /api/post/'+req.params.post_id+"/unlike").green)
-        return res.status(200).json({result: 1});
-      }
-    });
-  });
-  app.get('/api/user/idfromCode/:id', function(req, res) {
-    console.log(("[req] /api/user/idfromCode"+req.params.id).blue);
-    User.find({ _id: req.params.id }, function(err, targetUser) {
-      console.log(targetUser);
-      if (!targetUser[0]) {
-        console.error()
-        return res.status(404).json( { "result": 0 } );
-      }
-      if (err) {
-        console.error(('[err] /api/post/'+req.params.id).red);
-        console.error(err);
-        return res.status(500).json( { "result": 0 } );
-      }
-      else return res.status(200).json( targetUser[0].userIDString );
     });
   });
 
-  //GET /api/post/:user_id_string
+  //POST /api/user/idfromCode/:id
+  app.get('/api/user/idfromCode/:id', function(req, res) {
+    reqAddr = '/api/user/idfromCode/'+req.params.id;
+    logger.logReq(reqAddr);
+    User.find({ _id: req.params.id }, function(err, targetUser) {
+      console.log(targetUser);
+      if (!targetUser[0]) {
+        logger.logError(reqAddr, err);
+        res.status(404).json({result: 0});
+      }
+      if (err) {
+        logger.logError(reqAddr, err);
+        res.status(500).json({result: 0});
+      } else {
+        logger.logOk(reqAddr);
+        return res.status(200).json(targetUser[0].userIDString);
+      }
+    });
+  });
+
   app.get('/api/post/user/:user_id_string', function(req, res) {
-    console.log(('[req] /api/post/user/'+req.params.user_id_string).blue);
+    reqAddr = '/api/post/user/'+req.params.user_id_string;
+    logger.logReq(reqAddr);
     User.find({userIDString: req.params.user_id_string}, function(err, targetUser) {
       if (err) {
-        console.error(('[err] /api/post/'+req.params.user_id_string).red);
-        console.error(err);
-        return res.status(500).json("\"result\": 0");
-      }
-      else if (!targetUser[0]) {
-        console.error(('[err] /api/post/'+req.params.user_id_string+": User not found").red);
-        return res.status(404).json("\"result\": 0");
-      }
-      else {
-        //get posts by user
+        logger.logError(reqAddr, err);
+        res.status(500).json({result: 0});
+      } else if (!targetUser[0]) {
+        logger.logError(reqAddr err);
+        res.status(404).json({result: 0});
+      } else {
         Post.find({uploader: targetUser[0]._id}, function(err, post) {
           if (err) {
-            console.error(('[err] /api/post/'+req.params.user_id_string).red);
-            console.error(err);
-            return res.status(500).json({result: 0});
-          }
-          else {
-            console.log(('[ok ] /api/post/'+req.params.user_id_string).green);
+            logger.logError(reqAddr, err);
+            res.status(500).json({result: 0});
+          } else {
+            logger.logOk(reqAddr);
             return res.status(200).json({result: 1, "posts": post });
           }
         });
