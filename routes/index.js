@@ -4,147 +4,33 @@ var colors = require('colors');
 var mongoose = require('mongoose');
 var multer = require('multer');
 var fs = require('fs');
-
-var ImageUpload = multer({ dest: '/upload' })
+var logger = require('../logger');
+var ImageUpload = multer({ dest: '/upload' });
 
 module.exports = function(app) {
 
-  app.post('/upload/content-images/:filename', ImageUpload.single('image'), function (req, res, next) {
-    console.log(('[req] /upload/content-images/'+req.params.filename).blue);
-    console.log(req.file);
-    fs.readFile(req.file.path, function (err, data) {
-      if (err) {
-        console.log(('[err] /upload/content-images/'+req.params.filename).red);
-        console.log(err);
-        res.status(500).json({result: 0});
-      }
-      else {
-        var newPath = __dirname + "/../public/content-images/"+req.params.filename;
-        fs.writeFile(newPath, data, function(err) {
-          if (err) {
-            console.log(('[err] /upload/content-images/'+req.params.filename).red);
-            console.log(err);
-            res.status(500).json({result: 0});
-          }
-          else {
-            console.log(('[ok ] /upload/content-images/'+req.params.filename).green);
-            res.status(200).json({result: 1, fileLocation: "/content-images/"+req.params.filename });
-          }
-        });
-      }
-    });
+  app.post('/upload/content-images/:filename', ImageUpload.single('image'), function (req, res) {
+    uploadFile(req, res, '/upload/content-images/'+req.params.filename);
   });
 
   app.post('/upload/profile-images/:filename', ImageUpload.single('image'), function (req, res, next) {
-    console.log(('[req] /upload/profile-images/'+req.params.filename).blue);
-    console.log(req.file);
-    fs.readFile(req.file.path, function (err, data) {
-      if (err) {
-        console.log(('[err] /upload/profile-images/'+req.params.filename).red);
-        console.log(err);
-        res.status(500).json({result: 0});
-      }
-      else {
-        var newPath = __dirname + "/../public/profile-images/"+req.params.filename;
-        fs.writeFile(newPath, data, function(err) {
-          if (err) {
-            console.log(('[err] /upload/profile-images/'+req.params.filename).red);
-            console.log(err);
-            res.status(500).json({result: 0});
-          }
-          else {
-            console.log(('[ok ] /upload/profile-images/'+req.params.filename).green);
-            res.status(200).json({result: 1, fileLocation: "/profile-images/"+req.params.filename });
-          }
-        });
-      }
-    });
+    uploadFile(req, res, '/upload/profile-images/'+req.params.filename);
   });
 
   app.post('/upload/background-images/:filename', ImageUpload.single('image'), function (req, res, next) {
-    console.log(('[req] /upload/background-images/'+req.params.filename).blue);
-
-    console.log(req.file);
-    fs.readFile(req.file.path, function (err, data) {
-      if (err) {
-        console.log(('[err] /upload/background-images/'+req.params.filename).red);
-        console.log(err);
-        res.status(500).json({result: 0});
-      }
-      else {
-        var newPath = __dirname + "/../public/background-images/"+req.params.filename;
-        fs.writeFile(newPath, data, function(err) {
-          if (err) {
-            console.log(('[err] /upload/background-images/'+req.params.filename).red);
-            console.log(err);
-            res.status(500).json({result: 0});
-          }
-          else {
-            console.log(('[ok ] /upload/background-images/'+req.params.filename).green);
-            res.status(200).json({result: 1, fileLocation: "/background-images/"+req.params.filename });
-          }
-        });
-      }
-    });
+    uploadFile(req, res, '/upload/background-images/'+req.params.filename);
   });
 
   app.post('/upload/voices/:filename', ImageUpload.single('voice'), function (req, res, next) {
-    console.log(('[req] /upload/voices/'+req.params.filename).blue);
-    console.log(req.file);
-    fs.readFile(req.file.path, function (err, data) {
-      if (err) {
-        console.log(('[err] /upload/voices/'+req.params.filename).red);
-        console.log(err);
-        res.status(500).json({result: 0});
-      }
-      else {
-        var newPath = __dirname + "/../public/voices/"+req.params.filename;
-        fs.writeFile(newPath, data, function(err) {
-          if (err) {
-            console.log(('[err] /upload/voices/'+req.params.filename).red);
-            console.log(err);
-            res.status(500).json({result: 0});
-          }
-          else {
-            console.log(('[ok ] /upload/voices/'+req.params.filename).green);
-            res.status(200).json({result: 1, fileLocation: "/voices/"+req.params.filename });
-          }
-        });
-      }
-    });
+    uploadFile(req, res, '/upload/voices/'+req.params.filename);
   });
 
   app.get('/', function(req, res) {
     res.render('index.html');
   });
 
-  //POST /api/user/
-  app.post('/api/user/', function(req, res) {
-    console.log(("[req] /api/user/").blue);
-    if (req.body.userIDString==undefined || req.body.password==undefined) {
-      console.error("[err] /api/user/: something is empty".red);
-      return res.status(400).json({result: 0});
-    }
-    console.log(req.body);
-    User.find({userIDString: req.body.userIDString}, function(err,User) {
-      if (err) {
-        console.log("[err] /api/user/".red);
-        console.log(err);
-        return res.status(500).json( {result: 0});
-      }
-      else if (!User[0]) {
-        console.log("[err] /api/user/: user not found".red);
-        return res.status(404).json({ result: 0, error: 'User not found' });
-      }
-      else if (req.body.password != User[0].password)
-        return res.status(400).json({ result: 0, error: 'Password incorrect'});
-      else return res.status(200).json({ result: 1, user: User[0]});
-    });
-    console.log("[ok ] /api/user/".blue);
-  });
-
   app.post('/api/user/add', function(req,res) {
-    console.log("[req] /api/user/add".blue);
+    logger.logReq('/api/user/add');
     var newUser = new User();
     newUser.userIDString = req.body.userIDString;
     newUser.screenName = req.body.screenName;
@@ -180,6 +66,7 @@ module.exports = function(app) {
       });
     });
   });
+
   app.post('/api/user/login', function(req, res) {
     User.findOne({userIDString: req.body.userIDString}, function(err,User) {
       if (!User){
@@ -328,7 +215,7 @@ module.exports = function(app) {
     });
 
   app.get('/api/user/:user_id_string', function(req, res) {
-    console.log(("[req] /api/user/"+req.params.user_id_string).blue);
+    logger.logReq('/api/user/'+req.params.user_id_string);
     User.find({userIDString: req.params.user_id_string}, {userIDString: 1, screenName: 1, quote: 1, followers: 1, following: 1, posts: 1},
       function(err, usr) {
         if (err) {
@@ -650,5 +537,28 @@ module.exports = function(app) {
         });
       }
     });
+  });
+}
+
+function uploadFile(req, res, fileDir) {
+  logger.logReq(fileDir);
+  fs.readFile(req.file.path, function (err, data) {
+    if (err) {
+      logger.logError(fileDir, err);
+      return res.status(500).json({result: 0});
+    }
+    else {
+      var newPath = __dirname + '/..'+fileDir.replace('upload','public');
+      fs.writeFile(newPath, data, function(err) {
+        if (err) {
+          logger.logError(fileDir, err);
+          return res.status(500).json({result: 0});
+        }
+        else {
+          logger.logOk(fileDir);
+          return res.status(200).json({result: 1, fileLocation: "/content-images/"+req.params.filename });
+        }
+      });
+    }
   });
 }
