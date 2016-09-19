@@ -4,13 +4,14 @@ var colors = require('colors');
 var mongoose = require('mongoose');
 var multer = require('multer');
 var fs = require('fs');
-var logger = require('../logger');
+var logger = require('logger');
 var ImageUpload = multer({ dest: '/upload' });
 
-const MISSING_MESSAGE = 'soneting is missing';
+const MISSING_MESSAGE = 'Someting is missing';
+const NO_USER_MESSAGE = 'No such user';
+const NO_POST_MESSAGE = 'Post not found';
 
 module.exports = function(app) {
-
   app.post('/upload/content-images/:filename', ImageUpload.single('image'), function (req, res) {
     uploadFile(req, res, '/upload/content-images/'+req.params.filename);
   });
@@ -31,8 +32,10 @@ module.exports = function(app) {
     res.render('index.html');
   });
 
+  //POST /api/user/add
   app.post('/api/user/add', function(req,res) {
-    logger.logReq('/api/user/add');
+    reqAddr = '/api/user/add';
+    logger.logReq(reqAddr);
     var newUser = new User();
     newUser.userIDString = req.body.userIDString;
     newUser.screenName = req.body.screenName;
@@ -42,26 +45,25 @@ module.exports = function(app) {
     newUser.followers = new Array;
     newUser.posts = new Array;
     if (req.body.userIDString==undefined || req.body.screenName==undefined || req.body.password==undefined || req.body.quote==undefined) {
-      console.log("[ok ] /api/user/add: something is empty".green);
+      logger.logError(reqAddr, MISSING_MESSAGE);
       return res.status(400).json({result: 0});
     }
     User.find({"userIDString": req.body.userIDString}, function(err, users) {
       if (users[0]) {
-        console.log("[ok ] /api/user/add: User already exists".green);
+        logger.logError(reqAddr, 'User already exists');
         return res.status(400).json({result: 0});
       }
       newUser.save(function(err) {
         if (err) {
-          console.error("[err] /api/user/add");
-          console.error(err);
-          res.json({result: 0});
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
         }
         else
         {
           User.find({"userIDString": req.body.userIDString}, function(err, users) {
             fs.createReadStream(__dirname + "/../public/profile_default.png").pipe(fs.createWriteStream(__dirname + "/../public/profile-images/image-"+users[0]._id+".png"));
             fs.createReadStream(__dirname + "/../public/background_default.png").pipe(fs.createWriteStream(__dirname + "/../public/background-images/image-"+users[0]._id+".png"));
-            console.log("[ok ] /api/user/add".green);
+            logger.logOk(reqAddr);
             return res.status(200).json({result: 1});
           });
         }
@@ -69,276 +71,277 @@ module.exports = function(app) {
     });
   });
 
+  //GET /api/user/login
   app.post('/api/user/login', function(req, res) {
+    reqAddr = '/api/user/login';
+    if (req.body.userIDString==undefined) {
+      logger.logError(reqAddr,MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
+    }
     User.findOne({userIDString: req.body.userIDString}, function(err,User) {
       if (!User){
-        console.log("[err] /api/user/login: User not found".red);
-        return res.status(404).json({ error: 'user not found' });
+        logger.logError(reqAddr, NO_USER_MESSAGE);
+        return res.status(404).json({result: 0});
       }
       if (User.password != req.body.password) {
-        console.log("[err] /api/user/login: Password is wrong");
-        return res.status(400).json({ result: 0});
+        logger.logError(reqAddr, 'Password wring');
+        return res.status(404).json({result: 0});
       }
-      console.log("[ok ] /api/user/login".green);
-      return res.status(200).json({ result: 1, "user": User});
+      logger.logOk(reqAddr);
+      return res.status(200).json({result: 1, "user": User});
       });
     });
 
+  //GET /api/user/:userIDString/stream
   app.get('/api/user/:userIDString/stream', function(req, res) {
-    console.log(("[req] /api/user"+req.params.userIDString+"/stream").blue);
+    reqAddr = '/api/user'+req.params.userIDString+'/stream';
+    logger.logReq(reqAddr);
     if (req.params.userIDString == undefined) {
-      console.error(("[req] /api/user"+req.params.userIDString+"/stream: field userIDString is empty").red);
-      return res.json({result: 0});
+      logger.logError(reqAddr,MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
     User.findOne({userIDString: req.params.userIDString}, function(err,user) {
       if (!user){
-        console.log("[req] /api/user"+req.params.userIDString+"/stream: User not found".red);
-        return res.status(404).json({ error: 'user not found' });
+        logger.logError(reqAddr, NO_USER_MESSAGE);
+        return res.status(404).json({result: 0});
       }
       if (err) {
-        console.log("[req] /api/user"+req.params.userIDString+"/stream".red);
-        console.log(err);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       }
       console.log(user.following);
       Post.find({'uploader': { $in : user.following, $in : user._id  }}, function (err, posts) {
         if (err) {
-          console.log(user.following);
-          console.log("[req] /api/user"+req.params.userIDString+"/stream".red);
-          console.log(err);
+          logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
+        } else {
+          logger.logOk(reqAddr);
+          return res.status(200).json({result: 1});
         }
-        else return res.status(200).json({result: 1, posts: posts });
       });
     });
   });
 
+  //PUT /api/user/change/screenname
   app.put('/api/user/change/screenname', function(req,res) {
-    console.log("[req] /api/user/change/screenname".blue);
+    reqAddr = '/api/user/change/screenname';
+    logger.logReq(reqAddr);
     if (req.body.userIDString == undefined) {
-      console.error("/api/user/change/screenname: field userIDString is empty");
-      return res.json({result: 0});
+      logger.logError(reqAddr,MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
     }
     User.findOne({userIDString: req.body.userIDString}, function(err,User) {
       if (!User){
-        console.log("[err] /api/user/change/screenname: User not found".red);
-        return res.json({ error: 'user not found' });
+        logger.logError(reqAddr, NO_USER_MESSAGE);
+        return res.status(404).json({result: 0});
       }
       if (err) {
-        console.log("[err] /api/user/change/screenname".red);
-        console.log(err);
+        logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       }
       User.collection.update({"_id": User._id}, {$set: {"screenName": req.body.newScreenName} }, function(err, output) {
         if (err) {
-          console.log("[err] /api/user/change/screenname: Server error".red);
-          console.log(err);
+          logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
         }
         else if (!output.result.n) {
-          console.log("/api/user/change/screenname: User not found");
+          logger.logError(reqAddr, NO_USER_MESSAGE);
           return res.status(404).json({result: 0});
         }
         else {
-          return res.status(200).json({message:"Screenname updated"});
+          logger.logOk(reqAddr);
+          return res.status(200).json({result: 1});
         }
       });
     });
-      console.log("[ok ] /api/user/change/screenname".green);
   });
 
-
-    app.put('/api/user/change/password', function(req,res) {
-      console.log("[req] /api/user/change/password".blue);
-      if (req.body.password == undefined) {
-        console.error("/api/user/change/password: field userIDString is empty");
-        return res.status(400).json({result: 0});
+  //PUT /api/user/change/password
+  app.put('/api/user/change/password', function(req,res) {
+    reqAddr = '/api/user/change/password';
+    logger.logReq(reqAddr);
+    if (req.body.password == undefined) {
+      logger.logError(reqAddr,MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
+    }
+    User.findOne({userIDString: req.body.userIDString}, function(err,User) {
+      if (!User){
+        logger.logError(reqAddr, NO_USER_MESSAGE);
+        return res.status(404).json({result: 0});
       }
-      User.findOne({userIDString: req.body.userIDString}, function(err,User) {
-        if (!User){
-          console.log("[err] /api/user/change/password: User not found".red);
-          return res.json({ error: 'user not found' });
-        }
-        if (err) {
-          console.log("[err] /api/user/change/password".red);
-          console.log(err);
-          return res.status(500).json({result: 0});
-        }
-        User.collection.update({"_id": User._id}, {$set: {"password": req.body.password} }, function(err, output) {
-          if (err) {
-            console.log("[err] /api/user/change/password: Server error".red);
-            console.log(err);
-            return res.status(500).json({result: 0});
-          }
-          else if (!output.result.n) {
-            console.log("/api/user/change/password: User not found");
-            return res.status(404).json({result: 0});
-          }
-          else {
-            return res.status(200).json({result: 1, message:"password updated"});
-          }
-        });
-      });
-        console.log("[ok ] /api/user/change/password".green);
-    });
-
-    app.put('/api/user/change/quote', function(req,res) {
-      console.log("[req] /api/user/change/quote".blue);
-      if (req.body.quote == undefined) {
-        console.error("/api/user/change/quote: field userIDString is empty");
-        return res.status(400).json({result: 0});
+      if (err) {
+        logger.logError(reqAddr, err);
+        return res.status(500).json({result: 0});
       }
-      User.findOne({userIDString: req.body.userIDString}, function(err,User) {
-        if (!User){
-          console.log("[err] /api/user/change/quote: User not found".red);
-          return res.json({ error: 'user not found' });
-        }
+      User.collection.update({"_id": User._id}, {$set: {"password": req.body.password} }, function(err, output) {
         if (err) {
-          console.log("[err] /api/user/change/quote".red);
-          console.log(err);
+          logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
+        } else if (!output.result.n) {
+          logger.logError(reqAddr, NO_USER_MESSAGE);
+          return res.status(404).json({result: 0});
+        } else {
+          logger.logOk(reqAddr);
+          return res.status(200).json({result: 1});
         }
-        User.collection.update({"_id": User._id}, {$set: {"quote": req.body.quote} }, function(err, output) {
-          if (err) {
-            console.log("[err] /api/user/change/quote: Server error".red);
-            console.log(err);
-            return res.status(500).json({result: 0});
-          }
-          else if (!output.result.n) {
-            console.log("/api/user/change/quote: User not found");
-            return res.status(404).json({result: 0});
-          }
-          else {
-            return res.status(200).json({result: 1, message:"quote updated"});
-          }
-        });
       });
-        console.log("[ok ] /api/user/change/quote".green);
     });
+  });
 
+  //PUT /api/user/change/quote
+  app.put('/api/user/change/quote', function(req,res) {
+    reqAddr = '/api/user/change/quote';
+    logger.logReq(reqAddr);
+    if (req.body.quote == undefined) {
+      logger.logError(reqAddr,MISSING_MESSAGE);
+      return res.status(400).json({result: 0});
+    }
+    User.findOne({userIDString: req.body.userIDString}, function(err,User) {
+      if (!User){
+        logger.logError(reqAddr, NO_USER_MESSAGE);
+        return res.status(404).json({result: 0});
+      }
+      if (err) {
+        logger.logError(reqAddr, err);
+        return res.status(500).json({result: 0});
+      }
+      User.collection.update({"_id": User._id}, {$set: {"quote": req.body.quote} }, function(err, output) {
+        if (err) {
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
+        } else if (!output.result.n) {
+          logger.logError(reqAddr, NO_USER_MESSAGE);
+          return res.status(404).json({result: 0});
+        } else {
+          logger.logOk(reqAddr);
+          return res.status(200).json({result: 1});
+        }
+      });
+    });
+  });
+
+  //POST /api/user/:user_id_string
   app.get('/api/user/:user_id_string', function(req, res) {
-    logger.logReq('/api/user/'+req.params.user_id_string);
+    reqAddr = '/api/user/'+req.params.user_id_string;
+    logger.logReq(reqAddr);
     User.find({userIDString: req.params.user_id_string}, {userIDString: 1, screenName: 1, quote: 1, followers: 1, following: 1, posts: 1},
       function(err, usr) {
         if (err) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+": "+err.message).red);
-          console.error(err);
+          logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
         }
         if (!usr) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+": No such user").red);
+          logger.logError(reqAddr, NO_USER_MESSAGE);
           return res.status(404).json({result: 0});
         }
-        res.json(usr);
-        console.log(("[ok ] /api/user/"+req.params.user_id_string).green);
-    });
-  });
-  app.get('/api/user/search/:user_id_string', function(req, res) {
-    console.log(("[req] /api/user/search").blue);
-    User.find({screenName: { "$regex": req.params.user_id_string} }, {userIDString: 1, screenName: 1 },
-      function(err, usr) {
-        if (err) {
-          console.error(("[err] /api/user/search: "+err.message).red);
-          console.error(err);
-          return res.status(500).json({result: 0});
-        }
-        if (!usr) {
-          console.error(("[err] /api/user/search: No such user").red);
-          return res.status(404).json({result: 0});
-        }
-        res.json(usr);
-        console.log(("[ok ] /api/user/search").green);
+        logger.logOk(reqAddr);
+        return res.status(200).json(usr);
     });
   });
 
+  //POST /api/user/search/:user_id_string
+  app.get('/api/user/search/:user_id_string', function(req, res) {
+    reqAddr = '/api/user/search'+req.params.user_id_string;
+    logger.logReq(reqAddr);
+    User.find({screenName: { "$regex": req.params.user_id_string} }, {userIDString: 1, screenName: 1 },
+      function(err, usr) {
+        if (err) {
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
+        }
+        if (!usr) {
+          logger.logError(reqAddr, NO_USER_MESSAGE);
+          return res.status(404).json({result: 0});
+        }
+        logger.logOk(reqAddr);
+        return res.status(200).json(usr);
+    });
+  });
+
+  //POST /api/user/:user_id_string/follow
   app.post('/api/user/:user_id_string/follow', function(req, res) {
-    console.log(("[req] /api/user/"+req.params.user_id_string+"/follow").blue);
+    reqAddr = '/api/user/'+req.params.user_id_string+'/follow';
+    logger.logReq(reqAddr);
     User.find({userIDString: req.params.user_id_string},
       function(err, followingUsr) {
         if (err) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+"/follow: "+err.message).red);
-          console.error(err);
-          return res.status(500).json({success: false});
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
         }
         if (!followingUsr[0]) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+"/follow: No such user").red);
-          return res.status(404).json({message: "No such user"});
+          logger.logError(reqAddr, NO_USER_MESSAGE);
+          return res.status(404).json({result: 0});
         }
-        //user to follow found
         User.find({userIDString: req.body.followerUserIDString},
           function(err, followerUsr) {
             if (err) {
-              console.error(("[err] /api/user/"+req.body.user_id_string+": "+err.message).red);
-              console.error(err);
+              logger.logError(reqAddr, err);
+              return res.status(500).json({result: 0});
             }
             if (!followerUsr[0]) {
-              console.error(("[err] /api/user/"+req.body.user_id_string+": No such user"+req.body.followerUserIDString).red);
-              return res.status(404).json({message: "no such user"});
+              logger.logError(reqAddr, NO_USER_MESSAGE);
+              return res.status(404).json({result: 0});
             }
-            //user following found
             User.collection.update({"_id": followerUsr[0]._id}, { "$addToSet" : { "following" : followingUsr[0]._id } }, function(err, output) {
               if (err) {
-                console.log(err);
-                return res.json({error: "database failure"});
-              }
-              else {
+                logger.logError(reqAddr, err);
+                return res.status(500).json({result: 0});
+              } else {
                 User.collection.update({"_id": followingUsr[0]._id}, { "$addToSet" : { "followers" : followerUsr[0]._id } }, function(err, output) {
                   if (err) {
-                    console.log(err);
-                    return res.json({error: "database failure"});
-                  }
-                  else {
-                    return res.json({message:"follow complete"});
+                    logger.logError(reqAddr, err);
+                    return res.status(500).json({result: 0});
+                  } else {
+                    logger.logOk(reqAddr);
+                    return res.status(200).json({result: 1});
                   }
                 });
               }
             });
-            console.log(("[ok ] /api/user/"+req.params.user_id_string+"/follow").green);
         });
     });
   });
 
+  //POST /api/user/:user_id_string/unfollow
   app.post('/api/user/:user_id_string/unfollow', function(req, res) {
-    console.log(("[req] /api/user/"+req.params.user_id_string+"/unfollow").blue);
+    reqAddr = '/api/user/'+req.params.user_id_string+'/unfollow';
+    logger.logReq(reqAddr);
     User.find({userIDString: req.params.user_id_string},
       function(err, followingUsr) {
         if (err) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+"/unfollow: "+err.message).red);
-          console.error(err);
+          logger.logError(reqAddr, err);
+          return res.status(500).json({result: 0});
         }
         if (!followingUsr[0]) {
-          console.error(("[err] /api/user/"+req.params.user_id_string+"/unfollow: No such user").red);
-          return res.status(404).json({message: "no such user"});
+          logger.logError(reqAddr, NO_USER_MESSAGE);
+          return res.status(404).json({result: 0});
         }
-        //user to follow found
         User.find({userIDString: req.body.followerUserIDString},
           function(err, followerUsr) {
             if (err) {
-              console.error(("[err] /api/user/"+req.params.user_id_string+": "+err.message).red);
-              console.error(err);
+              logger.logError(reqAddr, err);
+              return res.status(500).json({result: 0});
             }
             if (!followerUsr[0]) {
-              console.error(("[err] /api/user/"+req.params.user_id_string+": No such user"+req.body.followerUserIDString).red);
-              return res.status(404).json({message: "no such user"});
+              logger.logError(reqAddr, NO_USER_MESSAGE);
+              return res.status(404).json({result: 0});
             }
-            //user following found
             User.collection.update({"_id": followerUsr[0]._id}, { "$pull" : { "following" : followingUsr[0]._id } }, function(err, output) {
               if (err) {
-                console.log(err);
-                return res.json({error: "database failure"});
-              }
-              else {
+                logger.logError(reqAddr, err);
+                return res.status(500).json({result: 0});
+              } else {
                 User.collection.update({"_id": followingUsr[0]._id}, { "$pull" : { "followers" : followerUsr[0]._id } }, function(err, output) {
                   if (err) {
-                    console.log(err);
-                    return res.json({error: "database failure"});
+                    logger.logError(reqAddr, err);
+                    return res.status(500).json({result: 0});
                   } else {
-                    return res.json({message:"unfollow complete"});
+                    logger.logOk(reqAddr, err);
+                    return res.status(200).json({result: 1});
                   }
                 });
               }
             });
-            console.log(("[ok ] /api/user/"+req.params.user_id_string+"/unfollow").green);
         });
     });
   });
@@ -356,7 +359,7 @@ module.exports = function(app) {
         logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       } else if (!posts[0]) {
-        logger.logError(reqAddr, 'Post not found');
+        logger.logError(reqAddr, NO_POST_MESSAGE);
         return res.status(404).json({result: 0});
       } else {
         logger.logOk(reqAddr);
@@ -421,7 +424,7 @@ module.exports = function(app) {
           logger.logError(reqAddr, err);
           return res.status(500).json({result: 0});
         } else if (!post[0]) {
-          logger.logError(reqAddr, 'Post not found');
+          logger.logError(reqAddr, NO_POST_MESSAGE);
           return res.status(404).json({result: 0});
         } else {
         Post.update({ "_id": mongoose.Types.ObjectId(req.params.post_id) }, {"$push": {"comments": { "uploader": req.body.user_id, "uploaderID": Users[0].userIDString, "uploaderUsername": Users[0].screenName, "content": req.body.content, "uploadTime": Date.now } } }, function(err, output) {
@@ -429,7 +432,7 @@ module.exports = function(app) {
             logger.logError(reqAddr, err);
             return res.status(500).json({result: 0});
           } else if (!output.n) {
-            logger.logError(reqAddr, 'Post not found');
+            logger.logError(reqAddr, NO_POST_MESSAGE);
             return res.status(404).json({result: 0});
           } else {
             logger.logOk(reqAddr);
@@ -453,7 +456,7 @@ module.exports = function(app) {
         logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       } else if (!output.n) {
-        logger.logError(reqAddr, 'Post not found');
+        logger.logError(reqAddr, NO_POST_MESSAGE);
         return res.status(404).json({result: 0});
       } else if (output.nModified == 0) {
         logger.logOk(reqAddr, 'Already liked');
@@ -478,7 +481,7 @@ module.exports = function(app) {
         logger.logError(reqAddr, err);
         return res.status(500).json({result: 0});
       } else if (!output.n) {
-        logger.logError(reqAddr, 'Post not found');
+        logger.logError(reqAddr, NO_POST_MESSAGE);
         return res.status(404).json({result: 0});
       } else if (output.nModified == 0) {
         logger.logOk(reqAddr, 'Not liked');
@@ -551,7 +554,7 @@ function uploadFile(req, res, fileDir) {
         }
         else {
           logger.logOk(fileDir);
-          return res.status(200).json({result: 1, fileLocation: "/content-images/"+req.params.filename });
+          return res.status(200).json({result: 1, fileLocation: '/content-images/'+req.params.filename });
         }
       });
     }
