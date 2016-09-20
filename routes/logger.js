@@ -19,13 +19,3 @@ exports.logOk = function(loc, message) {
     console.log(('[ok ] '+loc).green);
   }
 }
-
-//res.status(500).json({result: 0});
-/*
-console.logError('/upload/content-images/'+req.params.filename, err);
-res.status(500).json({result: 0});
-
-    logger.logReq('/upload/content-images/'+req.params.filename);
-
-
-*/
